@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Speech Recognition Word Counter</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .input-group {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #target-word {
+            padding: 10px;
+            font-size: 16px;
+            width: 200px;
+        }
+        #toggle-listening {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #toggle-listening:hover {
+            background-color: #2980b9;
+        }
+        .info-box {
+            background-color: white;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .info-box h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        #transcription, #current-count, #total-count, #status {
+            font-weight: bold;
+        }
+        .listening {
+            background-color: #e74c3c !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-time Speech Recognition Word Counter</h1>
+    <div class="input-group">
+        <input type="text" id="target-word" placeholder="Enter target word">
+        <button id="toggle-listening">Start Listening</button>
+    </div>
+    <div class="info-box">
+        <h2>Transcription</h2>
+        <p id="transcription">No transcription yet</p>
+    </div>
+    <div class="info-box">
+        <h2>Current Count</h2>
+        <p>Target word appears <span id="current-count">0</span> time(s) in the last phrase</p>
+    </div>
+    <div class="info-box">
+        <h2>Total Count</h2>
+        <p>Target word has appeared <span id="total-count">0</span> time(s) overall</p>
+    </div>
+    <div class="info-box">
+        <h2>Status</h2>
+        <p id="status">Stopped</p>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            let totalCount = 0;
+            let isListening = false;
+            let recognitionInterval;
+
+            $('#toggle-listening').click(function() {
+                if (isListening) {
+                    stopListening();
+                } else {
+                    startListening();
+                }
+            });
+
+            function startListening() {
+                const targetWord = $('#target-word').val().toLowerCase();
+                if (!targetWord) {
+                    alert('Please enter a target word.');
+                    return;
+                }
+
+                $.post('/start_listening', function(response) {
+                    if (response.success) {
+                        isListening = true;
+                        $('#toggle-listening').text('Stop Listening').addClass('listening');
+                        $('#status').text('Listening...');
+                        recognitionInterval = setInterval(function() {
+                            recognizeSpeech(targetWord);
+                        }, 1000);  // Poll every second for more real-time updates
+                    } else {
+                        $('#status').text('Error: ' + response.error);
+                    }
+                });
+            }
+
+            function stopListening() {
+                $.post('/stop_listening', function(response) {
+                    if (response.success) {
+                        isListening = false;
+                        $('#toggle-listening').text('Start Listening').removeClass('listening');
+                        $('#status').text('Stopped');
+                        clearInterval(recognitionInterval);
+                    } else {
+                        $('#status').text('Error: ' + response.error);
+                    }
+                });
+            }
+
+            function recognizeSpeech(targetWord) {
+                $.ajax({
+                    url: '/recognize',
+                    method: 'POST',
+                    data: { 'target_word': targetWord },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#transcription').text(response.transcription);
+                            $('#current-count').text(response.word_count);
+                            totalCount += response.word_count;
+                            $('#total-count').text(totalCount);
+                        } else if (response.error !== 'No audio available') {
+                            $('#status').text('Error: ' + response.error);
+                        }
+                    },
+                    error: function() {
+                        $('#status').text('Error occurred while processing the request.');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
